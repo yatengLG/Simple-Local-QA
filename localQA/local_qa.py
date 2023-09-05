@@ -91,7 +91,6 @@ class LocalQA:
         docs, files = self.search(question)
         context = '\n'.join(docs)
         prompt = self.prompt_template.format(context=context, question=question)
-        print('prompt: ', prompt)
         response, history = self.llm.chat(prompt, history=self.history)
         self.history = history
         self.empty_cuda()
@@ -102,6 +101,21 @@ class LocalQA:
         self.history = history
         self.empty_cuda()
         return response
+
+    def stream_ask_kb(self, question):
+        docs, files = self.search(question)
+        context = '\n'.join(docs)
+        prompt = self.prompt_template.format(context=context, question=question)
+        for response, history in self.llm.stream_chat(prompt, history=self.history):
+            self.history = history
+            self.empty_cuda()
+            yield response, docs, files
+
+    def stream_ask_llm(self, question):
+        for response, history in self.llm.stream_chat(question, history=self.history):
+            self.history = history
+            self.empty_cuda()
+            yield response
 
     def clear(self):
         self.vector_store.clear()

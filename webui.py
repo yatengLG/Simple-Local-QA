@@ -24,21 +24,34 @@ def change_mode(mode, chatbot):
 
 def get_answer(mode, query, chatbot):
     if mode == 'LLM对话':
-        response = localQA.ask_llm(query)
+        # response = localQA.ask_llm(query)
+        for response in localQA.stream_ask_llm(query):
+            yield '', chatbot + [[query, response]]
+
     elif mode == '知识库问答':
         if localQA.vector_store is None:
             return '', chatbot+[[query, '请先选择知识库，然后进行知识库问答']]
         if localQA.vector_store.index_store.ntotal < 1:
             return '', chatbot+[[query, '知识库为空，请向知识库中添加知识后再进行提问']]
-        response, docs, files = localQA.ask_kb(query)
-        message = '\n\n'
-        for index, (doc, file) in enumerate(zip(docs, files)):
-            file_name = os.path.split(file)[-1]
-            message += """<details> <summary>材料 [{}] {}</summary>\n{}\n</details>\n\n""".format(index+1, file_name, doc)
-        return '', chatbot + [[query, response + message]]
+
+        chatbot = chatbot + [[query, '']]
+        stream = localQA.stream_ask_kb(query)
+        while True:
+            try:
+                response, docs, files = next(stream)
+                yield '', chatbot[:-1] + [[query, response]]
+            except Exception as e:
+                print('e: ', e)
+                message = '\n\n'
+                for index, (doc, file) in enumerate(zip(docs, files)):
+                    file_name = os.path.split(file)[-1]
+                    message += """<details> <summary>材料 [{}] {}</summary>\n{}\n</details>\n\n""".format(index + 1,
+                                                                                                        file_name, doc)
+                yield '', chatbot[:-1] + [[query, response + message]]
+                break
     else:
         response = '请选择正确的对话模式，而不是{}'.format(mode)
-    return '', chatbot+[[query, response]]
+        return '', chatbot+[[query, response]]
 
 def update_knowledeg_base():
     return gr.update(visible=True, choices=get_vector_store_list(), value=None)
